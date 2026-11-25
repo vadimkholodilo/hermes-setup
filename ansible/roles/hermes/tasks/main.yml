@@ -1,0 +1,119 @@
+---
+- name: Stack directory
+  ansible.builtin.file:
+    path: "{{ hermes_dir }}"
+    state: directory
+    owner: root
+    group: docker
+    mode: "0750"
+
+- name: Traefik certificate directory
+  ansible.builtin.file:
+    path: "{{ hermes_dir }}/letsencrypt"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+# All Hermes state lives here (incl. model API keys) — owned by the container's hermes user.
+- name: Hermes data directory
+  ansible.builtin.file:
+    path: "{{ hermes_dir }}/data"
+    state: directory
+    owner: "{{ hermes_container_uid }}"
+    group: "{{ hermes_container_gid }}"
+    mode: "0700"
+
+- name: Compose file (single source of truth is docker/compose.yml in this repo)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../docker/compose.yml"
+    dest: "{{ hermes_dir }}/compose.yml"
+    owner: root
+    group: docker
+    mode: "0640"
+
+- name: Compose .env
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ hermes_dir }}/.env"
+    owner: root
+    group: docker
+    mode: "0640"
+  no_log: true
+
+- name: Start / update the stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ hermes_dir }}"
+    files: [compose.yml]
+    state: present
+    pull: always
+    remove_orphans: true
+  register: hermes_compose
+
+# On the very first boot the image seeds config.yaml as root *after* its ownership
+# fix-up step, so the dashboard can't save settings until the next restart.
+- name: Wait for Hermes to seed config.yaml
+  ansible.builtin.wait_for:
+    path: "{{ hermes_dir }}/data/config.yaml"
+    timeout: 120
+
+- name: Check config.yaml ownership
+  ansible.builtin.stat:
+    path: "{{ hermes_dir }}/data/config.yaml"
+  register: hermes_config_stat
+
+- name: Restart Hermes once so it re-owns config.yaml
+  community.docker.docker_compose_v2:
+    project_src: "{{ hermes_dir }}"
+    files: [compose.yml]
+    services: [hermes]
+    state: restarted
+  when: hermes_config_stat.stat.uid != hermes_container_uid | int
+
+# Hermes rate-limits logins per client IP. Without this, every visitor looks like Traefik,
+# so one bot guessing passwords would lock out all real users.
+- name: Read dashboard.trusted_proxies
+  ansible.builtin.command:
+    cmd: docker compose exec -T hermes hermes config get dashboard.trusted_proxies
+    chdir: "{{ hermes_dir }}"
+  register: hermes_trusted_proxies
+  changed_when: false
+  retries: 10
+  delay: 3
+  until: hermes_trusted_proxies.rc == 0
+
+- name: Trust Traefik's forwarded client IPs
+  ansible.builtin.command:
+    cmd: >-
+      docker compose exec -T hermes hermes config set dashboard.trusted_proxies
+      '["{{ hermes_traefik_ip }}"]'
+    chdir: "{{ hermes_dir }}"
+  when: ("- " ~ hermes_traefik_ip) not in hermes_trusted_proxies.stdout
+  register: hermes_trusted_proxies_set
+
+- name: Restart Hermes to apply trusted_proxies
+  community.docker.docker_compose_v2:
+    project_src: "{{ hermes_dir }}"
+    files: [compose.yml]
+    services: [hermes]
+    state: restarted
+  when: hermes_trusted_proxies_set is changed
+
+- name: Wait for HTTPS to answer (lands on the Hermes login page)
+  ansible.builtin.uri:
+    url: "https://{{ hermes_domain }}/"
+    status_code: [200]
+    validate_certs: "{{ not acme_staging }}"
+  register: hermes_https
+  retries: 12
+  delay: 10
+  until: hermes_https is succeeded
+  delegate_to: localhost
+  become: false
+  failed_when: false
+
+- name: Result
+  ansible.builtin.debug:
+    msg:
+      - "Dashboard: https://{{ hermes_domain }}  (HTTP {{ hermes_https.status | default('no answer') }})"
+      - "If it didn't answer: check DNS for {{ hermes_domain }} and `docker compose -f {{ hermes_dir }}/compose.yml logs`."

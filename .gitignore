@@ -1,0 +1,14 @@
+# Secrets & per-host config
+ansible/inventory/hosts.yml
+ansible/group_vars/all/vault.yml
+.vault-pass*
+docker/.env
+
+# Installed collections
+ansible/collections/
+
+# Local runtime data if running compose from this dir
+docker/data/
+docker/letsencrypt/
+docker/traefik/
+.dev-data/

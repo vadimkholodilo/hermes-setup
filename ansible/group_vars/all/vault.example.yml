@@ -1,0 +1,6 @@
+# Copy to vault.yml (gitignored) and encrypt it:
+#   cp group_vars/all/vault.example.yml group_vars/all/vault.yml
+#   ansible-vault encrypt group_vars/all/vault.yml
+# Generate values with: openssl rand -base64 24   /   openssl rand -hex 32
+vault_hermes_dashboard_password: change-me
+vault_hermes_dashboard_session_secret: change-me-to-64-hex-chars

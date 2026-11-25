@@ -1,0 +1,30 @@
+---
+# Idempotent: configure the machine and deploy/upgrade Hermes. Safe to re-run any time.
+#   ansible-playbook site.yml --ask-vault-pass
+#   ansible-playbook site.yml --tags hermes --ask-vault-pass   # only (re)deploy the stack
+- name: Configure Hermes VPS
+  hosts: all
+  become: true
+  pre_tasks:
+    - name: Supported OS check
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.os_family == 'Debian'
+        fail_msg: "Only Debian/Ubuntu are supported (got {{ ansible_facts.distribution }})."
+      tags: always
+
+    - name: Refuse placeholder settings
+      ansible.builtin.assert:
+        that:
+          - hermes_domain != 'hermes.example.com'
+          - acme_email != 'you@example.com'
+          - hermes_dashboard_password != 'change-me'
+          - hermes_dashboard_session_secret is not match('change-me')
+        fail_msg: "Set hermes_domain, acme_email and the vault secrets (see group_vars/all)."
+      tags: always
+
+  roles:
+    - { role: base, tags: [base] }
+    - { role: security, tags: [security] }
+    - { role: docker, tags: [docker] }
+    - { role: hermes, tags: [hermes] }

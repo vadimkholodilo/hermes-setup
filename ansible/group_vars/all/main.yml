@@ -1,0 +1,32 @@
+---
+# ---- Machine ----
+admin_user: deploy
+# Public key(s) allowed to log in as admin_user.
+admin_ssh_public_keys:
+  - "{{ lookup('ansible.builtin.file', '~/.ssh/id_ed25519.pub') }}"
+timezone: UTC
+ssh_port: 22
+# Swap file size (0 disables). Hermes + browser tools like >= 2 GB RAM; swap is a safety net.
+swap_size_mb: 2048
+
+# ---- Hermes ----
+hermes_dir: /opt/hermes
+hermes_domain: hermes.example.com
+acme_email: you@example.com
+# Set true while testing to avoid Let's Encrypt rate limits (cert will be untrusted).
+acme_staging: false
+hermes_version: stable
+traefik_version: v3.6
+# UID/GID of the non-root "hermes" user inside the image; the data dir must be owned by it.
+hermes_container_uid: 10000
+hermes_container_gid: 10000
+
+# Hermes dashboard login: the only login (Traefik just terminates TLS and forwards).
+# Also what the Hermes Desktop app signs in with (Remote gateway: https://<hermes_domain>).
+hermes_dashboard_username: admin
+hermes_dashboard_password: "{{ vault_hermes_dashboard_password }}"
+hermes_dashboard_session_secret: "{{ vault_hermes_dashboard_session_secret }}"
+
+# Traefik's fixed IP on the hermes_proxy network (must match docker/compose.yml).
+# Hermes trusts X-Forwarded-For only from this address.
+hermes_traefik_ip: 172.30.0.254

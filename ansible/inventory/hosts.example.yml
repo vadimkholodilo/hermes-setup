@@ -1,0 +1,8 @@
+# Copy to hosts.yml (gitignored) and fill in.
+all:
+  hosts:
+    hermes:
+      ansible_host: 203.0.113.10
+      # bootstrap.yml connects as root (override with -u if your provider uses e.g. "ubuntu");
+      # site.yml connects as admin_user created by bootstrap.
+      ansible_user: "{{ admin_user }}"
