@@ -39,7 +39,7 @@ Provisions Nous Research's **Hermes Agent** on a fresh Debian/Ubuntu VPS: `deplo
 `make lint` (bash -n + playbook syntax checks) and `docker compose -f docker/compose.yml config -q`. For the prod config check, copy `docker/.env.example` to `docker/.env` first, then delete it afterwards.
 
 ## Environment gotchas
-- **Repo layout:** the git root is `hermes-setup/hermes-setup/`; the parent dir is not a repo. Default branch is `master`; commit on a feature branch.
+- **Branching:** default branch is `master`; commit on a feature branch.
 - **zsh:** never store a command in a variable (`C="docker compose -f x"; $C ps` fails silently). Use a function.
 - **macOS tools:** BSD `sed` has no `\b` (use `perl -pi`). `deploy.sh` must stay bash 3.2-compatible.
 - **rtk:** a hook rewrites shell commands and can hide output (e.g. `ls`). Use `rtk proxy <cmd>` for raw output.
