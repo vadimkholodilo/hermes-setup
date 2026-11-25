@@ -1,109 +1,198 @@
 # hermes-setup
 
-Everything needed to put [Hermes Agent](https://hermes-agent.nousresearch.com/) on a fresh VPS:
+Run [Hermes Agent](https://hermes-agent.nousresearch.com/) on your own VPS with one command.
 
-- **`docker/compose.yml`**: Hermes (gateway + web dashboard) behind **Traefik** with automatic HTTPS
-- **`ansible/`**: turns a blank Debian/Ubuntu VPS into a hardened Docker host and deploys the stack
+- **Docker Compose** runs Hermes (gateway + web dashboard) behind **Traefik**, which handles HTTPS automatically.
+- **Ansible** turns a blank Debian/Ubuntu server into a hardened Docker host and deploys the stack.
 
-Why Traefik instead of nginx: see [docs/reverse-proxy.md](docs/reverse-proxy.md).
+```
+Internet ─▶ :443 Traefik ──(HTTPS)──▶ Hermes dashboard :9119  (Hermes login)
+                                      Hermes gateway ─▶ model provider / Telegram / ...
+                                      /opt/hermes/data  (all state)
+```
 
-## Try it locally first
+Hermes publishes no ports of its own. Traefik is the only way in.
+Why Traefik and not nginx: see [docs/reverse-proxy.md](docs/reverse-proxy.md).
 
-`docker/compose.dev.yml` runs the same image on your machine. It has the same shape as production: Hermes publishes no ports and is only reachable through Traefik. It uses plain HTTP on localhost, with no domain and no certificates.
+**Contents**
+
+1. [Try it locally](#1-try-it-locally)
+2. [Deploy to a VPS](#2-deploy-to-a-vps)
+3. [After the first deploy](#3-after-the-first-deploy)
+4. [Day-to-day operations](#4-day-to-day-operations)
+5. [Reference](#5-reference)
+
+---
+
+## 1. Try it locally
+
+You need Docker (Docker Desktop on macOS). Then:
 
 ```bash
-cd docker
-docker compose -f compose.dev.yml up -d
+make dev
 ```
 
-| URL | Login |
+| Open | What | Login |
+|---|---|---|
+| http://hermes.localhost:8080 | Hermes dashboard | `dev` / `dev-password` |
+| http://localhost:8081 | Traefik UI (dev only) | none |
+
+The Hermes URL also works as a Remote gateway in the Hermes Desktop app.
+
+Useful commands:
+
+| Command | Does |
 |---|---|
-| http://hermes.localhost:8080 | Hermes: `dev` / `dev-password` (also works as the Desktop app's Remote gateway URL) |
-| http://localhost:8081 | Traefik's own UI (routers/middlewares), dev only |
+| `make dev` | Start the stack |
+| `make dev-down` | Stop it (your data is kept) |
+| `make dev-logs` | Follow the logs |
+| `make dev-ps` | Show the containers |
+| `make dev-pull` | Pull newer images (then `make dev` again) |
+| `make dev-shell` | Open a shell in the Hermes container |
+| `make dev-config` | Print the combined dev config |
 
-State lives in `docker/.dev-data/` (gitignored). Stop with `docker compose -f compose.dev.yml down`. Delete `.dev-data/` to start from scratch. The first image pull is about 1.1 GB.
+Good to know:
 
-```
-Internet ─▶ :443 Traefik ──(TLS)──▶ hermes:9119 dashboard (Hermes login)
-                                                 hermes gateway ─▶ model provider / Telegram / ...
-                                                 /opt/hermes/data  (all state)
-```
+- The first image pull is about 1.1 GB.
+- State lives in `docker/.dev-data/` (gitignored). Delete it to start from scratch.
+- The dev stack works like production, but over plain HTTP on localhost: no domain, no certificates, nothing reachable from outside your machine.
 
-## What the playbook does
+---
 
-| Role | |
-|---|---|
-| `bootstrap.yml` | Run once as root: creates the `deploy` admin user with your SSH key and passwordless sudo |
-| `base` | Full upgrade, base packages, timezone, unattended security upgrades, 2 GB swap |
-| `security` | SSH: key-only, no root, `AllowUsers deploy`. UFW allows only 22/80/443. fail2ban for sshd |
-| `docker` | Docker CE and the compose plugin from Docker's repo, log rotation |
-| `hermes` | `/opt/hermes` with compose file, `.env` and data dir; pulls and starts the stack; makes Hermes trust Traefik's forwarded client IPs; checks HTTPS |
+## 2. Deploy to a VPS
 
-The model provider is **not** configured by the playbook. Set it up in the dashboard after the first deploy (it's stored in `/opt/hermes/data/.env`, which the playbook never touches).
+### What you need
 
-## Requirements
+- **A VPS:** Ubuntu 24.04 or Debian 12/13, x86_64 or arm64, **at least 2 GB RAM** (4 GB if you'll use browser tools).
+- **Your SSH key authorized for `root`.** Most providers let you add it when you create the server. Everything runs as root over SSH keys; there's no separate admin user, because the server only runs Hermes.
+- **A domain** with a DNS **A record** (and AAAA if you have IPv6) pointing at the VPS. Set it up **before** deploying, so Let's Encrypt can issue the certificate.
+- **On your machine:** `ansible-core` 2.16 or newer (`brew install ansible`).
 
-- VPS: Ubuntu 24.04 or Debian 12/13, **≥ 2 GB RAM** (4 GB if you'll use browser tools), x86_64 or arm64
-- A DNS **A record** (and AAAA if you have IPv6) for your domain pointing at the VPS, set **before** deploying so Let's Encrypt can issue the cert
-- Locally: `ansible-core` ≥ 2.16 (`brew install ansible`) and an SSH key
-- Your SSH key authorized for the VPS's initial user (usually `root`). Most providers let you add it when you create the server.
-
-## Deploy
+### Run it
 
 ```bash
-./deploy.sh
+./deploy.sh        # or: make deploy
 ```
 
-On the first run the script asks for the VPS IP, initial SSH user, domain, Let's Encrypt email, admin username and SSH key. Then it:
+On the first run it asks for:
 
-1. **Generates** a random 24-character admin password and a session secret.
-2. **Saves the settings** to `ansible/inventory/hosts.yml` (gitignored, chmod 600).
-3. **Bootstraps the server** (creates the `deploy` user), unless that user can already log in.
-4. **Runs the full playbook.**
-5. **Prints the login** and saves it to `credentials.txt` next to the script (gitignored, chmod 600).
+- VPS address: an IP, or a `Host` alias from your `~/.ssh/config` (handy if you use a non-default key)
+- domain
+- Let's Encrypt email
+- admin username
+- whether to use staging certificates
 
-Re-running `./deploy.sh` reuses the saved settings, so the password stays the same. Use it to upgrade or re-apply config. `./deploy.sh --tags hermes` (or `make hermes`) only redeploys the stack. To change the password, edit `hermes_dashboard_password` in `ansible/inventory/hosts.yml` and re-run.
+> **Tip:** answer **y** to staging certificates on your first try. This avoids Let's Encrypt rate limits; the browser will show a warning, which is expected. See [Switch to real certificates](#switch-to-real-certificates) when it works.
 
-Tip: answer "y" to the staging-certs question for the first test, to avoid Let's Encrypt rate limits. Afterwards, set `acme_staging: false` in `hosts.yml`, delete `/opt/hermes/letsencrypt/acme.json` on the server, and run `make hermes`.
+Then the script:
 
-## After first deploy
+1. Generates a random admin password and a session secret.
+2. Saves all settings to `ansible/inventory/hosts.yml` (gitignored, mode 600).
+3. Checks that it can SSH in as root with your key.
+4. Runs the full Ansible playbook.
+5. Prints your login and saves it to `credentials.txt` (gitignored, mode 600).
 
-1. Open `https://<your-domain>` and sign in with the username and password from `credentials.txt`.
-2. **Configure your model provider** in the dashboard. Alternatively, use the CLI wizard:
+### Running it again
+
+Re-running `./deploy.sh` reuses the saved settings, so your password stays the same. Use it to upgrade or to re-apply config.
+
+---
+
+## 3. After the first deploy
+
+1. **Sign in.** Open `https://<your-domain>` and use the login from `credentials.txt`.
+2. **Set up your model provider** in the dashboard. Or use the CLI wizard on the server:
    ```bash
-   ssh deploy@<vps>
+   ssh root@<vps>
    cd /opt/hermes && docker compose exec hermes hermes model     # or: hermes setup
    ```
-3. **Hermes Desktop** (you or a friend): go to Settings → Gateways → Remote gateway, enter `https://<your-domain>`, then Sign in with the same login.
+   The repo never manages the provider. Hermes stores it in `/opt/hermes/data/.env`, and the playbook doesn't touch that file.
+3. **Connect Hermes Desktop (optional).** In the app, go to Settings → Gateways → Remote gateway. Enter `https://<your-domain>` and sign in with the same login.
 
-The playbook already sets `dashboard.trusted_proxies` to Traefik's IP. Hermes allows 10 wrong passwords per minute **per client IP**. Without this setting, every visitor would look like Traefik, and one bot could lock everyone out.
+### Switch to real certificates
 
-Later, for per-person accounts and 2FA, Hermes supports an OIDC provider such as Keycloak (`HERMES_DASHBOARD_OIDC_ISSUER` / `HERMES_DASHBOARD_OIDC_CLIENT_ID`).
+If you started with staging certificates:
 
-## Day-2 operations
+1. Set `acme_staging: false` in `ansible/inventory/hosts.yml`.
+2. Delete `/opt/hermes/letsencrypt/acme.json` on the server.
+3. Run `make hermes`.
+
+---
+
+## 4. Day-to-day operations
+
+### From your laptop
+
+| Command | Does |
+|---|---|
+| `make deploy` | Full re-deploy: system config and the Hermes stack |
+| `make hermes` | Only redeploy or upgrade the Hermes stack |
+| `make check` | Dry run: shows what would change, changes nothing |
+
+### On the server
 
 ```bash
+ssh root@<vps>
 cd /opt/hermes
-docker compose ps
-docker compose logs -f hermes
-docker compose exec hermes hermes --help        # Hermes CLI inside the container
-docker compose pull && docker compose up -d     # upgrade (or: make hermes from your laptop)
+docker compose ps                               # status
+docker compose logs -f hermes                   # logs
+docker compose exec hermes hermes --help        # Hermes CLI
+docker compose pull && docker compose up -d     # upgrade
 ```
 
-- **Pin versions:** set `hermes_version` in `group_vars/all/main.yml` to an exact tag once you're happy. The default is `stable`.
-- **Backups:** everything that matters is in `/opt/hermes/data`. It contains credentials, so keep backups private. Example:
-  `sudo tar czf hermes-$(date +%F).tgz -C /opt/hermes data`
-- **Never run a second `gateway run` container** against the same data dir.
+### Common tasks
 
-## Layout
+- **Change the password:** edit `hermes_dashboard_password` in `ansible/inventory/hosts.yml`, then run `make hermes`.
+- **Pin a Hermes version:** set `hermes_version` to an exact tag (e.g. `v0.23.4`) in `ansible/group_vars/all/main.yml`. The default is `stable`.
+- **Back up:** everything that matters is in `/opt/hermes/data`. It contains credentials, so keep backups private.
+  ```bash
+  sudo tar czf hermes-$(date +%F).tgz -C /opt/hermes data
+  ```
+- **Never** run a second `gateway run` container against the same data directory.
+
+---
+
+## 5. Reference
+
+### What the playbook sets up
+
+| Step | What it does |
+|---|---|
+| `base` role | Full upgrade, base packages, timezone, unattended security upgrades, a 2 GB swap file (added on top of any swap the provider set up). |
+| `security` role | SSH: key-only login (passwords disabled), only root allowed. Firewall (UFW) opens only ports 22, 80 and 443. fail2ban bans an IP for 20 minutes after 10 failed SSH logins. |
+| `docker` role | Docker CE and the compose plugin from Docker's own repo, plus log rotation. |
+| `hermes` role | Creates `/opt/hermes` with the compose file, `.env` and data directory. Starts the stack, makes Hermes trust Traefik's client IPs, and checks that HTTPS works. |
+
+### Security notes
+
+- **SSH:** root with keys only. Password logins are disabled for everyone. Before changing SSH, the playbook checks that root has an authorized key, so it can't lock you out.
+- **fail2ban:** 10 failed SSH logins within 10 minutes bans that IP for 20 minutes. Tune `fail2ban_*` in `ansible/group_vars/all/main.yml`.
+- **Firewall:** only ports 22, 80 and 443 are open.
+
+- **Hermes' own login is the only gate.** There's no extra Traefik password, because the Hermes Desktop app can't get past one.
+- **Rate limit:** Hermes allows 10 wrong passwords per minute **per client IP**. The playbook sets `dashboard.trusted_proxies` to Traefik's IP so Hermes sees each visitor's real IP. Without it, everyone would share one limit, and a single bot could lock everyone out.
+- **Later:** for per-person accounts and 2FA, Hermes supports an OIDC provider such as Keycloak (`HERMES_DASHBOARD_OIDC_ISSUER` / `HERMES_DASHBOARD_OIDC_CLIENT_ID`).
+
+### How the compose files fit together
+
+- `docker/compose.yml` is the production stack and the single source of truth. Ansible copies it to the server as-is.
+- The local dev stack is that same file plus:
+  - `docker/compose.dev.yml`: overrides (plain HTTP, localhost ports, local data folder)
+  - `docker/dev.env`: dev values
+- `make dev` combines them for you. It requires Docker Compose 2.24 or newer.
+
+### Repo layout
 
 ```
-docker/compose.yml           stack definition (single source; Ansible copies it)
-docker/.env.example          compose variables (Ansible generates the real one)
-ansible/bootstrap.yml        first-run admin user
-ansible/site.yml             idempotent machine config + deploy
 deploy.sh                    one-command deploy; generates password, writes credentials.txt
-ansible/group_vars/all/      defaults (main.yml); your settings + secrets go in inventory/hosts.yml
+Makefile                     shortcuts (run `make` to list them)
+docker/compose.yml           production stack (single source; Ansible copies it)
+docker/.env.example          compose variables (Ansible generates the real .env)
+docker/compose.dev.yml       local dev overrides on top of compose.yml
+docker/dev.env               dev compose variables (committed, dev-only values)
+ansible/site.yml             machine config + deploy (safe to re-run)
+ansible/group_vars/all/      defaults (main.yml)
+ansible/inventory/hosts.yml  your settings + secrets (created by deploy.sh, gitignored)
 ansible/roles/               base, security, docker, hermes
 docs/reverse-proxy.md        Traefik vs nginx, adding more apps, exposing the API
 ```

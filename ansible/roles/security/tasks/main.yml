@@ -1,15 +1,22 @@
 ---
+# We're about to refuse password logins and allow only root, so root must have a key.
+- name: Read root's authorized SSH keys
+  ansible.builtin.slurp:
+    src: /root/.ssh/authorized_keys
+  register: root_authorized_keys
+
 - name: Make sure we won't lock ourselves out
   ansible.builtin.assert:
     that:
-      - ansible_user == admin_user
+      - ansible_user_id == 'root'
+      - root_authorized_keys.content | b64decode is search('(?m)^(ssh-|ecdsa-|sk-)')
     fail_msg: >-
-      site.yml must connect as {{ admin_user }} (run bootstrap.yml first) — it disables
-      root and password SSH logins.
+      site.yml must log in as root with an SSH key (root needs a key in /root/.ssh/authorized_keys),
+      because it disables password SSH logins and allows only root.
 
 - name: Install security packages
   ansible.builtin.apt:
-    name: [ufw, fail2ban]
+    name: [ufw, fail2ban, python3-systemd]
     state: present
 
 - name: SSH hardening drop-in
@@ -29,9 +36,9 @@
       enabled = true
       port = {{ ssh_port }}
       backend = systemd
-      maxretry = 5
-      findtime = 10m
-      bantime = 1h
+      maxretry = {{ fail2ban_maxretry }}
+      findtime = {{ fail2ban_findtime }}
+      bantime = {{ fail2ban_bantime }}
     mode: "0644"
   notify: Restart fail2ban
 

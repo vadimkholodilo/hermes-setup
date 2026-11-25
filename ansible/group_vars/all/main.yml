@@ -1,11 +1,14 @@
 ---
 # ---- Machine ----
-admin_user: deploy
-# Public key(s) allowed to log in as admin_user (deploy.sh fills this in hosts.yml).
-admin_ssh_public_keys: []
+# Ansible logs in as root with your existing SSH key (no separate admin user: the box only runs Hermes).
+# Password SSH logins get disabled, so root must already have an authorized key.
 timezone: UTC
 ssh_port: 22
-# Swap file size (0 disables). Hermes + browser tools like >= 2 GB RAM; swap is a safety net.
+# fail2ban for sshd: ban an IP for fail2ban_bantime after fail2ban_maxretry failures within fail2ban_findtime.
+fail2ban_maxretry: 10
+fail2ban_findtime: 10m
+fail2ban_bantime: 20m
+# Size of /swapfile (0 disables). Added on top of any provider swap. Hermes + browser tools like >= 2 GB RAM; swap is a safety net.
 swap_size_mb: 2048
 
 # ---- Hermes ----

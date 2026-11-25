@@ -1,47 +1,25 @@
-# Local playground: no domain, no certificates, nothing reachable from outside your machine.
+# Local dev overrides, layered on top of compose.yml (the base / production file).
+# No domain, no certificates, nothing reachable from outside your machine.
 #
-#   cd docker
-#   docker compose -f compose.dev.yml up -d     # → http://hermes.localhost:8080  (login dev / dev-password)
-#   docker compose -f compose.dev.yml down      # stop (state in ./.dev-data is kept)
+#   make dev          # → http://hermes.localhost:8080  (login dev / dev-password)
+#   make dev-down     # stop (state in ./.dev-data is kept)
+#
+# Without make (from the repo root):
+#   docker compose -f docker/compose.yml -f docker/compose.dev.yml --env-file docker/dev.env up -d
 #
 # Same shape as production: Hermes publishes no ports and is only reachable through
 # Traefik (plain HTTP here instead of HTTPS). Traefik's own UI: http://localhost:8081
+#
+# Only differences from compose.yml live here. `!override` replaces a list/map
+# instead of merging into it (needs Docker Compose >= 2.24).
+# Deliberately NOT named compose.override.yml: that name is auto-loaded by
+# `docker compose`, so copying this dir to a server would silently apply dev settings.
 
 name: hermes-dev
 
 services:
-  hermes:
-    image: nousresearch/hermes-agent:${HERMES_VERSION:-stable}
-    restart: unless-stopped
-    command: gateway run
-    environment:
-      HERMES_DASHBOARD: "1"
-      HERMES_DASHBOARD_HOST: 0.0.0.0
-      HERMES_DASHBOARD_PORT: "9119"
-      # The dashboard refuses to bind 0.0.0.0 without an auth provider, even locally.
-      HERMES_DASHBOARD_BASIC_AUTH_USERNAME: ${DASHBOARD_USERNAME:-dev}
-      HERMES_DASHBOARD_BASIC_AUTH_PASSWORD: ${DASHBOARD_PASSWORD:-dev-password}
-      HERMES_DASHBOARD_BASIC_AUTH_SECRET: ${DASHBOARD_SESSION_SECRET:-dev-only-insecure-session-secret-0123456789abcdef}
-      TZ: ${TZ:-UTC}
-    volumes:
-      - ./.dev-data:/opt/data
-    shm_size: 1g
-    # No ports: only reachable through Traefik, like production.
-    networks:
-      - proxy
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.hermes.rule=Host(`hermes.localhost`)
-      - traefik.http.routers.hermes.entrypoints=web
-      - traefik.http.routers.hermes.middlewares=hermes-headers
-      - traefik.http.services.hermes.loadbalancer.server.port=9119
-      - traefik.http.middlewares.hermes-headers.headers.contentTypeNosniff=true
-      - traefik.http.middlewares.hermes-headers.headers.referrerPolicy=same-origin
-
   traefik:
-    image: traefik:${TRAEFIK_VERSION:-v3.6}
-    restart: unless-stopped
-    command:
+    command: !override
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
       - --providers.docker.network=hermes_dev_proxy
@@ -52,18 +30,32 @@ services:
       - --accesslog=true
       - --global.checknewversion=false
       - --global.sendanonymoususage=false
-    ports:
+    ports: !override
       - "127.0.0.1:8080:80"
       - "127.0.0.1:8081:8080"
-    volumes:
+    volumes: !override
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       proxy:
         ipv4_address: 172.31.0.254
 
+  hermes:
+    environment:
+      HERMES_DASHBOARD_PUBLIC_URL: http://${HERMES_DOMAIN}:8080
+    volumes: !override
+      - ./.dev-data:/opt/data
+    labels: !override
+      - traefik.enable=true
+      - traefik.http.routers.hermes.rule=Host(`${HERMES_DOMAIN}`)
+      - traefik.http.routers.hermes.entrypoints=web
+      - traefik.http.routers.hermes.middlewares=hermes-headers
+      - traefik.http.services.hermes.loadbalancer.server.port=9119
+      - traefik.http.middlewares.hermes-headers.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.hermes-headers.headers.referrerPolicy=same-origin
+
 networks:
   proxy:
     name: hermes_dev_proxy
-    ipam:
+    ipam: !override
       config:
         - subnet: 172.31.0.0/24

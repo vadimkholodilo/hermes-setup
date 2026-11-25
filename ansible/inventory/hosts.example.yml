@@ -3,11 +3,8 @@
 all:
   hosts:
     hermes:
-      ansible_host: '203.0.113.10'
-      ansible_user: '{{ admin_user }}'
-      bootstrap_user: 'root'            # initial SSH user on the fresh VPS (bootstrap.yml only)
-      admin_ssh_public_keys:
-        - 'ssh-ed25519 AAAA... you@laptop'
+      ansible_host: '203.0.113.10'      # IP, hostname, or a Host alias from ~/.ssh/config
+      ansible_user: 'root'
       hermes_domain: 'hermes.example.com'
       acme_email: 'you@example.com'
       acme_staging: false

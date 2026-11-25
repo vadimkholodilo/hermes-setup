@@ -1,11 +1,12 @@
 # Managed by Ansible
 Port {{ ssh_port }}
-PermitRootLogin no
+# Root logs in with SSH keys only; passwords are refused for everyone.
+PermitRootLogin prohibit-password
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PubkeyAuthentication yes
 AuthenticationMethods publickey
-AllowUsers {{ admin_user }}
+AllowUsers root
 MaxAuthTries 3
 LoginGraceTime 30
 X11Forwarding no

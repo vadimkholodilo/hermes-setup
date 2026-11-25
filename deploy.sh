@@ -14,7 +14,6 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 ANSIBLE_DIR="$ROOT/ansible"
 INVENTORY="$ANSIBLE_DIR/inventory/hosts.yml"
 CREDENTIALS="$ROOT/credentials.txt"
-ADMIN_USER="deploy" # SSH/sudo user on the VPS (matches group_vars/all/main.yml)
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
@@ -41,23 +40,12 @@ done
 # ---------------------------------------------------------------- settings
 if [ ! -f "$INVENTORY" ]; then
   bold "First run: a few questions (saved to ansible/inventory/hosts.yml)"
-  ask VPS_IP "VPS IP address"
-  echo "(Your SSH key must already be authorized for the initial user: most VPS providers let you add it when creating the server.)"
-  ask BOOTSTRAP_USER "Initial SSH user on the fresh VPS" "root"
-  ask DOMAIN "Domain for Hermes (DNS A record must point to $VPS_IP)"
+  echo "(Ansible logs in as root with your SSH key: it must already be authorized for root.)"
+  ask VPS_IP "VPS address (IP, or a Host alias from ~/.ssh/config)"
+  ask DOMAIN "Domain for Hermes (DNS A record must point to the VPS)"
   ask ACME_EMAIL "Email for Let's Encrypt expiry notices"
   ask DASH_USER "Hermes admin username" "admin"
   ask STAGING "Use Let's Encrypt staging certs (for testing, browser will warn)? y/N" "n"
-  default_key=""
-  for k in ~/.ssh/id_ed25519.pub ~/.ssh/id_ecdsa.pub ~/.ssh/id_rsa.pub ~/.ssh/*.pub; do
-    [ -f "$k" ] && { default_key="$k"; break; }
-  done
-  if ls ~/.ssh/*.pub >/dev/null 2>&1; then
-    echo "Your public keys:"; for k in ~/.ssh/*.pub; do echo "  $k"; done
-  fi
-  ask SSH_KEY "SSH public key to install for '$ADMIN_USER'" "$default_key"
-  SSH_KEY="${SSH_KEY/#\~/$HOME}"
-  [ -f "$SSH_KEY" ] || die "SSH key $SSH_KEY not found (create one with: ssh-keygen -t ed25519)"
   case "$STAGING" in [yY]*) STAGING=true ;; *) STAGING=false ;; esac
 
   NEW_PASS="$(random_password)"
@@ -71,10 +59,7 @@ all:
   hosts:
     hermes:
       ansible_host: $(yaml_quote "$VPS_IP")
-      ansible_user: '{{ admin_user }}'
-      bootstrap_user: $(yaml_quote "$BOOTSTRAP_USER")
-      admin_ssh_public_keys:
-        - $(yaml_quote "$(cat "$SSH_KEY")")
+      ansible_user: 'root'
       hermes_domain: $(yaml_quote "$DOMAIN")
       acme_email: $(yaml_quote "$ACME_EMAIL")
       acme_staging: $STAGING
@@ -89,7 +74,6 @@ else
 fi
 
 VPS_IP="$(inv_get ansible_host)"
-BOOTSTRAP_USER="$(inv_get bootstrap_user)"
 DOMAIN="$(inv_get hermes_domain)"
 DASH_USER="$(inv_get hermes_dashboard_username)"
 DASH_PASS="$(inv_get hermes_dashboard_password)"
@@ -101,14 +85,9 @@ cd "$ANSIBLE_DIR"
 bold "Installing Ansible collections"
 ansible-galaxy collection install -r requirements.yml -p collections >/dev/null
 
-# ---------------------------------------------------------------- bootstrap (once)
-if ssh -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new \
-  "$ADMIN_USER@$VPS_IP" true 2>/dev/null; then
-  bold "'$ADMIN_USER' can already log in: skipping bootstrap"
-else
-  bold "Bootstrapping $VPS_IP as '$BOOTSTRAP_USER' (creates '$ADMIN_USER')"
-  ansible-playbook bootstrap.yml
-fi
+# ---------------------------------------------------------------- SSH check
+ssh -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new "root@$VPS_IP" true \
+  || die "can't SSH to root@$VPS_IP with a key. Authorize your SSH key for root first."
 
 # ---------------------------------------------------------------- deploy
 bold "Configuring the server and deploying Hermes"
@@ -124,7 +103,7 @@ Username:   $DASH_USER
 Password:   $DASH_PASS
 
 Hermes Desktop: Settings > Gateways > Remote gateway > https://$DOMAIN, then Sign in.
-Server SSH: ssh $ADMIN_USER@$VPS_IP    (stack lives in /opt/hermes)
+Server SSH: ssh root@$VPS_IP    (stack lives in /opt/hermes)
 EOF
 chmod 600 "$CREDENTIALS"
 

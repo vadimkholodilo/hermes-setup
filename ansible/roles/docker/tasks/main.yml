@@ -58,12 +58,5 @@
     enabled: true
     state: started
 
-# Note: docker group membership is root-equivalent. It's convenient for a single-admin box.
-- name: Let admin user run docker without sudo
-  ansible.builtin.user:
-    name: "{{ admin_user }}"
-    groups: docker
-    append: true
-
 - name: Flush handlers (restart docker before deploying)
   ansible.builtin.meta: flush_handlers
