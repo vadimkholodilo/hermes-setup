@@ -1,24 +1,18 @@
 ANSIBLE_DIR := ansible
-VAULT := --ask-vault-pass
 PB := cd $(ANSIBLE_DIR) && ansible-playbook
 
-.PHONY: deps bootstrap deploy hermes check lint
+.PHONY: deploy hermes check lint
 
-deps: ## Install required Ansible collections
-	cd $(ANSIBLE_DIR) && ansible-galaxy collection install -r requirements.yml -p collections
-
-bootstrap: ## First run on a fresh VPS (as root): create admin user
-	$(PB) bootstrap.yml $(VAULT)
-
-deploy: ## Full machine config + Hermes stack (idempotent)
-	$(PB) site.yml $(VAULT)
+deploy: ## First install or full re-deploy (asks questions on first run)
+	./deploy.sh
 
 hermes: ## Only (re)deploy / upgrade the Hermes stack
-	$(PB) site.yml --tags hermes $(VAULT)
+	./deploy.sh --tags hermes
 
-check: ## Dry run with diff
-	$(PB) site.yml --check --diff $(VAULT)
+check: ## Dry run with diff (after the first deploy)
+	$(PB) site.yml --check --diff
 
-lint: ## Syntax check playbooks
-	$(PB) bootstrap.yml --syntax-check
-	$(PB) site.yml --syntax-check
+lint: ## Syntax check scripts and playbooks
+	bash -n deploy.sh
+	$(PB) bootstrap.yml --syntax-check -i inventory/hosts.example.yml
+	$(PB) site.yml --syntax-check -i inventory/hosts.example.yml

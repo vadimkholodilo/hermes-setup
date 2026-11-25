@@ -1,7 +1,6 @@
 # Secrets & per-host config
 ansible/inventory/hosts.yml
-ansible/group_vars/all/vault.yml
-.vault-pass*
+credentials.txt
 docker/.env
 
 # Installed collections

@@ -1,7 +1,8 @@
 ---
 # Idempotent: configure the machine and deploy/upgrade Hermes. Safe to re-run any time.
-#   ansible-playbook site.yml --ask-vault-pass
-#   ansible-playbook site.yml --tags hermes --ask-vault-pass   # only (re)deploy the stack
+# Normally run via ../deploy.sh. Directly:
+#   ansible-playbook site.yml
+#   ansible-playbook site.yml --tags hermes   # only (re)deploy the stack
 - name: Configure Hermes VPS
   hosts: all
   become: true
@@ -18,9 +19,9 @@
         that:
           - hermes_domain != 'hermes.example.com'
           - acme_email != 'you@example.com'
-          - hermes_dashboard_password != 'change-me'
-          - hermes_dashboard_session_secret is not match('change-me')
-        fail_msg: "Set hermes_domain, acme_email and the vault secrets (see group_vars/all)."
+          - hermes_dashboard_password | length >= 12
+          - hermes_dashboard_session_secret | length >= 32
+        fail_msg: "Missing settings or secrets: run ./deploy.sh (it generates inventory/hosts.yml)."
       tags: always
 
   roles:

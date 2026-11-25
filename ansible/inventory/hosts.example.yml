@@ -1,8 +1,16 @@
-# Copy to hosts.yml (gitignored) and fill in.
+# ../../deploy.sh generates hosts.yml (gitignored) for you. This file only shows its shape,
+# in case you'd rather write it by hand.
 all:
   hosts:
     hermes:
-      ansible_host: 203.0.113.10
-      # bootstrap.yml connects as root (override with -u if your provider uses e.g. "ubuntu");
-      # site.yml connects as admin_user created by bootstrap.
-      ansible_user: "{{ admin_user }}"
+      ansible_host: '203.0.113.10'
+      ansible_user: '{{ admin_user }}'
+      bootstrap_user: 'root'            # initial SSH user on the fresh VPS (bootstrap.yml only)
+      admin_ssh_public_keys:
+        - 'ssh-ed25519 AAAA... you@laptop'
+      hermes_domain: 'hermes.example.com'
+      acme_email: 'you@example.com'
+      acme_staging: false
+      hermes_dashboard_username: 'admin'
+      hermes_dashboard_password: ''     # openssl rand -base64 18
+      hermes_dashboard_session_secret: ''  # openssl rand -hex 32

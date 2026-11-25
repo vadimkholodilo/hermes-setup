@@ -1,7 +1,6 @@
 ---
-# Run ONCE against a fresh VPS, as the provider's initial user (root by default):
-#   ansible-playbook bootstrap.yml                       # as root
-#   ansible-playbook bootstrap.yml -e bootstrap_user=ubuntu   # if the image ships a sudo user
+# Run ONCE against a fresh VPS, as the provider's initial user (bootstrap_user, root by default).
+# ../deploy.sh runs it automatically when admin_user can't log in yet.
 # Creates admin_user with your SSH key and passwordless sudo. Everything else is site.yml,
 # which logs in as admin_user (root login gets disabled there).
 - name: Bootstrap admin user
@@ -11,6 +10,11 @@
   vars:
     ansible_user: "{{ bootstrap_user | default('root') }}"
   tasks:
+    - name: Need at least one SSH key for the admin user
+      ansible.builtin.assert:
+        that: admin_ssh_public_keys | length > 0
+        fail_msg: "admin_ssh_public_keys is empty: run ./deploy.sh or set it in inventory/hosts.yml."
+
     - name: Wait for SSH / python
       ansible.builtin.wait_for_connection:
         timeout: 120

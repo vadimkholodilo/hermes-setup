@@ -45,31 +45,30 @@ The model provider is **not** configured by the playbook. Set it up in the dashb
 
 - VPS: Ubuntu 24.04 or Debian 12/13, **≥ 2 GB RAM** (4 GB if you'll use browser tools), x86_64 or arm64
 - A DNS **A record** (and AAAA if you have IPv6) for your domain pointing at the VPS, set **before** deploying so Let's Encrypt can issue the cert
-- Locally: `ansible-core` ≥ 2.16 and an SSH key (`~/.ssh/id_ed25519.pub` by default)
+- Locally: `ansible-core` ≥ 2.16 (`brew install ansible`) and an SSH key
+- Your SSH key authorized for the VPS's initial user (usually `root`). Most providers let you add it when you create the server.
 
 ## Deploy
 
 ```bash
-make deps                                    # install Ansible collections
-
-cd ansible
-cp inventory/hosts.example.yml inventory/hosts.yml        # set the VPS IP
-cp group_vars/all/vault.example.yml group_vars/all/vault.yml
-$EDITOR group_vars/all/main.yml              # hermes_domain, acme_email (and admin_user / ssh key if needed)
-$EDITOR group_vars/all/vault.yml             # two secrets: openssl rand -base64 24 / openssl rand -hex 32
-ansible-vault encrypt group_vars/all/vault.yml
-cd ..
-
-make bootstrap   # once, as root (or: cd ansible && ansible-playbook bootstrap.yml -e bootstrap_user=ubuntu)
-ssh deploy@<vps-ip>   # confirm the new user works before continuing
-make deploy      # everything else; safe to re-run
+./deploy.sh
 ```
 
-Tip: for the first test set `acme_staging: true` to avoid Let's Encrypt rate limits. Then set it back to `false`, delete `/opt/hermes/letsencrypt/acme.json`, and run `make hermes`.
+On the first run the script asks for the VPS IP, initial SSH user, domain, Let's Encrypt email, admin username and SSH key. Then it:
+
+1. **Generates** a random 24-character admin password and a session secret.
+2. **Saves the settings** to `ansible/inventory/hosts.yml` (gitignored, chmod 600).
+3. **Bootstraps the server** (creates the `deploy` user), unless that user can already log in.
+4. **Runs the full playbook.**
+5. **Prints the login** and saves it to `credentials.txt` next to the script (gitignored, chmod 600).
+
+Re-running `./deploy.sh` reuses the saved settings, so the password stays the same. Use it to upgrade or re-apply config. `./deploy.sh --tags hermes` (or `make hermes`) only redeploys the stack. To change the password, edit `hermes_dashboard_password` in `ansible/inventory/hosts.yml` and re-run.
+
+Tip: answer "y" to the staging-certs question for the first test, to avoid Let's Encrypt rate limits. Afterwards, set `acme_staging: false` in `hosts.yml`, delete `/opt/hermes/letsencrypt/acme.json` on the server, and run `make hermes`.
 
 ## After first deploy
 
-1. Open `https://<your-domain>` and sign in with `hermes_dashboard_username` and the vault password.
+1. Open `https://<your-domain>` and sign in with the username and password from `credentials.txt`.
 2. **Configure your model provider** in the dashboard. Alternatively, use the CLI wizard:
    ```bash
    ssh deploy@<vps>
@@ -103,7 +102,8 @@ docker/compose.yml           stack definition (single source; Ansible copies it)
 docker/.env.example          compose variables (Ansible generates the real one)
 ansible/bootstrap.yml        first-run admin user
 ansible/site.yml             idempotent machine config + deploy
-ansible/group_vars/all/      settings (main.yml) and secrets (vault.yml, gitignored)
+deploy.sh                    one-command deploy; generates password, writes credentials.txt
+ansible/group_vars/all/      defaults (main.yml); your settings + secrets go in inventory/hosts.yml
 ansible/roles/               base, security, docker, hermes
 docs/reverse-proxy.md        Traefik vs nginx, adding more apps, exposing the API
 ```
