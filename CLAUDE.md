@@ -46,7 +46,15 @@ Provisions Nous Research's **Hermes Agent** on a fresh Debian/Ubuntu VPS: `deplo
 - **rtk:** a hook rewrites shell commands and can hide output (e.g. `ls`). Use `rtk proxy <cmd>` for raw output.
 - **Docker:** Docker Desktop may not be running (`open -a Docker`). Big image pulls can stall on the last layer; kill and re-pull, since finished layers are cached.
 
+## Production server
+- SSH alias `hermesal` (root, key from `~/.ssh/config`); dashboard `https://hrmsal.ls.fyi`. Linode, Ubuntu 26.04 "resolute", 1 CPU / 1.9 GB RAM, swap 2.5 GB (provider's 512 MB partition + 2 GB `/swapfile`).
+- Re-deploy: `make hermes` (stack only) or `make deploy`. `./deploy.sh --tags <role>` runs one role.
+- Login is in `credentials.txt`; settings in `ansible/inventory/hosts.yml` (`ansible_host: hermesal`).
+
 ## Status / next steps
-- **Not yet run on a real VPS.** The owner will provide one.
-- **First run:** use Let's Encrypt staging (`acme_staging: true`).
-- **Verify on Linux:** bind-mount permissions, the first-boot restart and `trusted_proxies` tasks, and Desktop remote mode (upstream bug reports exist).
+- **Deployed 2026-11-25** with real Let's Encrypt certs. Verified: HTTPS + HTTP→HTTPS redirect, dashboard login, `trusted_proxies`, data dir owned by 10000:10000, password SSH refused, UFW, fail2ban values; the playbook is idempotent (re-run reports `changed=0`).
+- **Still to verify:** Hermes Desktop remote mode against `https://hrmsal.ls.fyi` (upstream bug reports exist).
+- **Watch RAM:** Hermes idles around 470 MB. If swap use stays high or browser tools are slow, resize to 4 GB / 2 CPUs.
+- **Known noise:** the image logs `install out of sync (pnpm…)`. It's harmless and comes from upstream.
+- **On 1 CPU, Hermes needs about a minute to boot.** The playbook's final HTTPS check may report 502 even though the deploy worked; re-check with curl.
+- **ansible-core is strict about conditionals:** `assert`/`when` must evaluate to real booleans. Use `is search(...)`, not `regex_search`.
