@@ -1,0 +1,10 @@
+# Managed by Ansible (roles/hermes).
+[Unit]
+Description=Update the Hermes compose stack to the newest images
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/hermes-update

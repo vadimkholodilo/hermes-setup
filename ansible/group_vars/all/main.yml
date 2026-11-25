@@ -35,6 +35,12 @@ hermes_version: stable
 # Timezone inside the Hermes container (cron jobs, timestamps). IANA name, e.g. Europe/Moscow.
 hermes_timezone: "{{ timezone }}"
 traefik_version: v3.6
+# Daily `docker compose pull && up -d` for this stack only (systemd timer; replaces Watchtower).
+# Pin hermes_version / traefik_version to control what an update can bring in.
+hermes_autoupdate_enabled: true
+# systemd OnCalendar syntax; a trailing timezone is allowed. Default: 04:00 in Hermes' timezone.
+hermes_autoupdate_on_calendar: "*-*-* 04:00 {{ hermes_timezone }}"
+hermes_autoupdate_random_delay: 15min
 # UID/GID of the non-root "hermes" user inside the image; the data dir must be owned by it.
 hermes_container_uid: 10000
 hermes_container_gid: 10000

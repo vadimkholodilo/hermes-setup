@@ -131,6 +131,27 @@ If you started with staging certificates:
 | `make hermes` | Only redeploy or upgrade the Hermes stack |
 | `make check` | Dry run: shows what would change, changes nothing |
 
+### Automatic updates
+
+A systemd timer updates the stack every day at **04:00** in Hermes' timezone (plus up to 15 minutes of random delay). It:
+
+1. pulls newer images for the services in `/opt/hermes/compose.yml`;
+2. recreates only the containers whose image changed;
+3. checks that the dashboard answers;
+4. removes the images it just replaced.
+
+It only acts on this compose project, so other containers on the same server are never touched. This replaces Watchtower, which is archived.
+
+```bash
+systemctl list-timers hermes-update.timer      # next run
+systemctl start hermes-update                  # update now
+journalctl -u hermes-update                    # what happened
+```
+
+- **Change the schedule:** set `hermes_autoupdate_on_calendar` in `ansible/group_vars/all/main.yml` (systemd `OnCalendar` syntax).
+- **Turn it off:** set `hermes_autoupdate_enabled: false`.
+- **Limit what an update can bring in:** pin `hermes_version` and `traefik_version`. A failed update makes the `hermes-update` service fail, so it shows in `systemctl --failed`.
+
 ### On the server
 
 ```bash
@@ -139,7 +160,7 @@ cd /opt/hermes
 docker compose ps                               # status
 docker compose logs -f hermes                   # logs
 docker compose exec hermes hermes --help        # Hermes CLI
-docker compose pull && docker compose up -d     # upgrade
+docker compose pull && docker compose up -d     # upgrade by hand (the timer does this daily)
 ```
 
 ### Common tasks
@@ -163,7 +184,7 @@ docker compose pull && docker compose up -d     # upgrade
 | `base` role | Full upgrade, base packages, timezone, unattended security upgrades, a 2 GB swap file (added on top of any swap the provider set up). |
 | `security` role | SSH: key-only login (passwords disabled), only your SSH user allowed (root can't log in directly unless it *is* that user). Firewall (UFW) opens only ports 22, 80 and 443. fail2ban bans an IP for 20 minutes after 10 failed SSH logins. |
 | [`geerlingguy.docker`](https://galaxy.ansible.com/ui/standalone/roles/geerlingguy/docker/) | Docker CE and the compose plugin from Docker's own repo. Log rotation and `live-restore` are set via `docker_daemon_options` in `group_vars`. Pinned in `ansible/requirements.yml`. |
-| `hermes` role | Creates `/opt/hermes` with the compose file, `.env` and data directory. Starts the stack, makes Hermes trust Traefik's client IPs, and checks that HTTPS works. |
+| `hermes` role | Creates `/opt/hermes` with the compose file, `.env` and data directory. Starts the stack, makes Hermes trust Traefik's client IPs, installs the daily auto-update timer, and checks that HTTPS works. |
 
 ### Security notes
 

@@ -104,6 +104,9 @@
     state: restarted
   when: hermes_trusted_proxies_set is changed
 
+- name: Auto-update timer
+  ansible.builtin.include_tasks: autoupdate.yml
+
 - name: Wait for HTTPS to answer (lands on the Hermes login page)
   ansible.builtin.uri:
     url: "https://{{ hermes_domain }}/"

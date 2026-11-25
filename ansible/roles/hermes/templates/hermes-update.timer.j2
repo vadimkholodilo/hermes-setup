@@ -1,0 +1,12 @@
+# Managed by Ansible (roles/hermes). Schedule: hermes_autoupdate_on_calendar.
+[Unit]
+Description=Daily Hermes image update
+
+[Timer]
+OnCalendar={{ hermes_autoupdate_on_calendar }}
+RandomizedDelaySec={{ hermes_autoupdate_random_delay }}
+# Catch up on a missed run (e.g. the server was off at that time).
+Persistent=true
+
+[Install]
+WantedBy=timers.target

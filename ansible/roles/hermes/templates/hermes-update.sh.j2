@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Managed by Ansible (roles/hermes). Run by hermes-update.timer.
+#
+# Pulls newer images for the services in {{ hermes_dir }}/compose.yml and recreates only the
+# containers whose image changed. It only ever acts on this compose project: other
+# containers and images on the host are never touched.
+#
+# Run by hand:  systemctl start hermes-update   Logs:  journalctl -u hermes-update
+set -euo pipefail
+
+# Don't run twice at once (e.g. timer firing during a manual run).
+exec 9>/run/hermes-update.lock
+flock -n 9 || { echo "Another update is running; skipping."; exit 0; }
+
+cd {{ hermes_dir }}
+dc() { docker compose -f compose.yml "$@"; }
+
+before="$(dc images -q | sort -u)"
+dc pull --quiet
+dc up -d --remove-orphans
+after="$(dc images -q | sort -u)"
+
+old="$(comm -23 <(printf '%s\n' "$before") <(printf '%s\n' "$after") | sed '/^$/d')"
+if [ -z "$old" ]; then
+  echo "Images are up to date."
+  exit 0
+fi
+echo "Updated. Containers now run: $(dc ps --format '{{ '{{' }}.Service{{ '}}' }}={{ '{{' }}.Image{{ '}}' }}' | tr '\n' ' ')"
+
+# Wait for the dashboard to answer through Traefik (302 = login redirect). Hermes needs ~1 min on 1 CPU.
+ok=""
+for _ in $(seq 1 30); do
+  code="$(curl -s {{ '-k ' if acme_staging else '' }}-o /dev/null -w '%{http_code}' \
+    --resolve '{{ hermes_domain }}:443:127.0.0.1' 'https://{{ hermes_domain }}/' || true)"
+  case "$code" in 200|302) ok=1; break ;; esac
+  sleep 10
+done
+
+# Remove only the images this project just replaced (fails harmlessly if something else uses one).
+# shellcheck disable=SC2086
+docker image rm $old >/dev/null 2>&1 || true
+
+if [ -z "$ok" ]; then
+  echo "ERROR: https://{{ hermes_domain }} did not answer after the update (last HTTP ${code:-none})." >&2
+  echo "Check: cd {{ hermes_dir }} && docker compose logs --tail 100" >&2
+  exit 1
+fi
+echo "Dashboard answers (HTTP $code)."

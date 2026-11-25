@@ -1,0 +1,46 @@
+---
+# Daily `docker compose pull && up -d` for this stack only (Watchtower replacement).
+# Scoped by construction: it runs compose against {{ hermes_dir }}/compose.yml, so containers
+# from other projects on the host are never touched.
+- name: Auto-update script
+  ansible.builtin.template:
+    src: hermes-update.sh.j2
+    dest: /usr/local/sbin/hermes-update
+    owner: root
+    group: root
+    mode: "0750"
+  when: hermes_autoupdate_enabled | bool
+
+- name: Auto-update systemd units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [hermes-update.service, hermes-update.timer]
+  register: hermes_update_units
+  when: hermes_autoupdate_enabled | bool
+
+- name: Enable auto-update timer
+  ansible.builtin.systemd_service:
+    name: hermes-update.timer
+    enabled: true
+    state: started
+    daemon_reload: "{{ hermes_update_units is changed }}"
+  when: hermes_autoupdate_enabled | bool
+
+- name: Check for an existing auto-update timer
+  ansible.builtin.stat:
+    path: /etc/systemd/system/hermes-update.timer
+  register: hermes_update_timer_file
+  when: not hermes_autoupdate_enabled | bool
+
+- name: Disable auto-update timer
+  ansible.builtin.systemd_service:
+    name: hermes-update.timer
+    enabled: false
+    state: stopped
+  when:
+    - not hermes_autoupdate_enabled | bool
+    - hermes_update_timer_file.stat.exists
