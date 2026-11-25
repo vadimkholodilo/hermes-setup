@@ -3,8 +3,9 @@ ansible/inventory/hosts.yml
 credentials.txt
 docker/.env
 
-# Installed collections
+# Installed collections and Galaxy roles
 ansible/collections/
+ansible/galaxy_roles/
 
 # Local runtime data if running compose from this dir
 docker/data/

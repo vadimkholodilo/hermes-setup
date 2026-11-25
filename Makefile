@@ -7,7 +7,7 @@ DEV := docker compose -f docker/compose.yml -f docker/compose.dev.yml --env-file
 PROD := docker compose -f docker/compose.yml --env-file docker/.env.example
 
 .DEFAULT_GOAL := help
-.PHONY: help deploy hermes check lint dev dev-down dev-restart dev-logs dev-ps dev-pull dev-config dev-shell
+.PHONY: help deploy hermes check lint deps dev dev-down dev-restart dev-logs dev-ps dev-pull dev-config dev-shell
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -18,10 +18,14 @@ deploy: ## First install or full re-deploy (asks questions on first run)
 hermes: ## Only (re)deploy / upgrade the Hermes stack
 	./deploy.sh --tags hermes
 
-check: ## Dry run with diff (after the first deploy)
+deps: ## Install Ansible collections and Galaxy roles
+	cd $(ANSIBLE_DIR) && ansible-galaxy collection install -r requirements.yml -p collections >/dev/null
+	cd $(ANSIBLE_DIR) && ansible-galaxy role install -r requirements.yml -p galaxy_roles >/dev/null
+
+check: deps ## Dry run with diff (after the first deploy)
 	$(PB) site.yml --check --diff
 
-lint: ## Syntax check scripts, playbooks and compose files
+lint: deps ## Syntax check scripts, playbooks and compose files
 	bash -n deploy.sh
 	$(PB) site.yml --syntax-check -i inventory/hosts.example.yml
 	$(PROD) config -q

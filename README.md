@@ -160,13 +160,13 @@ docker compose pull && docker compose up -d     # upgrade
 |---|---|
 | `base` role | Full upgrade, base packages, timezone, unattended security upgrades, a 2 GB swap file (added on top of any swap the provider set up). |
 | `security` role | SSH: key-only login (passwords disabled), only root allowed. Firewall (UFW) opens only ports 22, 80 and 443. fail2ban bans an IP for 20 minutes after 10 failed SSH logins. |
-| `docker` role | Docker CE and the compose plugin from Docker's own repo, plus log rotation. |
+| [`geerlingguy.docker`](https://galaxy.ansible.com/ui/standalone/roles/geerlingguy/docker/) | Docker CE and the compose plugin from Docker's own repo. Log rotation and `live-restore` are set via `docker_daemon_options` in `group_vars`. Pinned in `ansible/requirements.yml`. |
 | `hermes` role | Creates `/opt/hermes` with the compose file, `.env` and data directory. Starts the stack, makes Hermes trust Traefik's client IPs, and checks that HTTPS works. |
 
 ### Security notes
 
 - **SSH:** root with keys only. Password logins are disabled for everyone. Before changing SSH, the playbook checks that root has an authorized key, so it can't lock you out.
-- **fail2ban:** 10 failed SSH logins within 10 minutes bans that IP for 20 minutes. Tune `fail2ban_*` in `ansible/group_vars/all/main.yml`.
+- **fail2ban:** 10 failed SSH logins within 10 minutes bans that IP for 20 minutes. It runs in `aggressive` mode, because with passwords off, bots never produce "Failed password" lines that normal mode would count. Tune `fail2ban_*` in `ansible/group_vars/all/main.yml`.
 - **Firewall:** only ports 22, 80 and 443 are open.
 
 - **Hermes' own login is the only gate.** There's no extra Traefik password, because the Hermes Desktop app can't get past one.
@@ -193,6 +193,7 @@ docker/dev.env               dev compose variables (committed, dev-only values)
 ansible/site.yml             machine config + deploy (safe to re-run)
 ansible/group_vars/all/      defaults (main.yml)
 ansible/inventory/hosts.yml  your settings + secrets (created by deploy.sh, gitignored)
-ansible/roles/               base, security, docker, hermes
+ansible/roles/               base, security, hermes (our own roles)
+ansible/requirements.yml     Galaxy collections + roles (installed by deploy.sh / `make deps`)
 docs/reverse-proxy.md        Traefik vs nginx, adding more apps, exposing the API
 ```

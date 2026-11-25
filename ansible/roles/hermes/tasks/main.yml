@@ -73,21 +73,26 @@
 # Hermes rate-limits logins per client IP. Without this, every visitor looks like Traefik,
 # so one bot guessing passwords would lock out all real users.
 - name: Read dashboard.trusted_proxies
-  ansible.builtin.command:
-    cmd: docker compose exec -T hermes hermes config get dashboard.trusted_proxies
-    chdir: "{{ hermes_dir }}"
+  community.docker.docker_compose_v2_exec:
+    project_src: "{{ hermes_dir }}"
+    files: [compose.yml]
+    service: hermes
+    argv: [hermes, config, get, dashboard.trusted_proxies]
+    tty: false
   register: hermes_trusted_proxies
   changed_when: false
+  check_mode: false # read-only, so it's safe to run during --check too
   retries: 10
   delay: 3
-  until: hermes_trusted_proxies.rc == 0
+  until: hermes_trusted_proxies.rc | default(1) == 0
 
 - name: Trust Traefik's forwarded client IPs
-  ansible.builtin.command:
-    cmd: >-
-      docker compose exec -T hermes hermes config set dashboard.trusted_proxies
-      '["{{ hermes_traefik_ip }}"]'
-    chdir: "{{ hermes_dir }}"
+  community.docker.docker_compose_v2_exec:
+    project_src: "{{ hermes_dir }}"
+    files: [compose.yml]
+    service: hermes
+    argv: [hermes, config, set, dashboard.trusted_proxies, '["{{ hermes_traefik_ip }}"]']
+    tty: false
   when: ("- " ~ hermes_traefik_ip) not in hermes_trusted_proxies.stdout
   register: hermes_trusted_proxies_set
 

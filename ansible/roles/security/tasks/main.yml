@@ -8,7 +8,7 @@
 - name: Make sure we won't lock ourselves out
   ansible.builtin.assert:
     that:
-      - ansible_user_id == 'root'
+      - ansible_facts['user_id'] == 'root'
       - root_authorized_keys.content | b64decode is search('(?m)^(ssh-|ecdsa-|sk-)')
     fail_msg: >-
       site.yml must log in as root with an SSH key (root needs a key in /root/.ssh/authorized_keys),
@@ -36,6 +36,9 @@
       enabled = true
       port = {{ ssh_port }}
       backend = systemd
+      # Passwords are off, so bots never log "Failed password". They show up as
+      # "Connection closed by authenticating user ... [preauth]", which only aggressive mode counts.
+      mode = aggressive
       maxretry = {{ fail2ban_maxretry }}
       findtime = {{ fail2ban_findtime }}
       bantime = {{ fail2ban_bantime }}

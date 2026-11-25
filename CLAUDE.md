@@ -4,7 +4,7 @@ Provisions Nous Research's **Hermes Agent** on a fresh Debian/Ubuntu VPS: `deplo
 
 ## Layout
 - `deploy.sh`: entry point. First run prompts, generates the password, writes `ansible/inventory/hosts.yml` (all settings + secrets), checks root SSH, then runs `site.yml`. Finally writes `credentials.txt`. Both outputs are gitignored, mode 600. Re-runs reuse `hosts.yml`.
-- `ansible/`: `site.yml` (roles base → security → docker → hermes), run as root. Defaults are in `group_vars/all/main.yml`; inventory host vars override them.
+- `ansible/`: `site.yml` (roles base → security → `geerlingguy.docker` → hermes), run as root. Galaxy roles/collections are pinned in `requirements.yml` and installed by `deploy.sh` or `make deps` into gitignored `galaxy_roles/` and `collections/`. Defaults are in `group_vars/all/main.yml`; inventory host vars override them.
 - `docker/compose.yml`: prod. Ansible copies it verbatim to `/opt/hermes`. Keep it the single source.
 - `docker/compose.dev.yml`: dev overrides layered on `compose.yml` (plain HTTP, localhost ports, `.dev-data`), with dev variables in `docker/dev.env`. Not named `compose.override.yml` on purpose: that's auto-loaded and would leak dev settings onto a server. Uses `!override` (Compose >= 2.24) to replace lists rather than merge.
 
@@ -57,4 +57,6 @@ Provisions Nous Research's **Hermes Agent** on a fresh Debian/Ubuntu VPS: `deplo
 - **Watch RAM:** Hermes idles around 470 MB. If swap use stays high or browser tools are slow, resize to 4 GB / 2 CPUs.
 - **Known noise:** the image logs `install out of sync (pnpm…)`. It's harmless and comes from upstream.
 - **On 1 CPU, Hermes needs about a minute to boot.** The playbook's final HTTPS check may report 502 even though the deploy worked; re-check with curl.
+- **fail2ban must stay in `mode = aggressive`.** Passwords are off, so bots only leave `Connection closed by authenticating user ... [preauth]` lines, and normal mode counts none of them (verified: normal 0 matches, aggressive 13 in an hour). To check it works: `fail2ban-client status sshd` and `grep Found /var/log/fail2ban.log`.
+- **Use `community.docker.docker_compose_v2_exec`, not `command: docker compose exec`.** Set `tty: false`, and add `check_mode: false` on read-only tasks so `--check` still works.
 - **ansible-core is strict about conditionals:** `assert`/`when` must evaluate to real booleans. Use `is search(...)`, not `regex_search`.

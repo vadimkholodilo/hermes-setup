@@ -82,8 +82,9 @@ DASH_PASS="$(inv_get hermes_dashboard_password)"
 cd "$ANSIBLE_DIR"
 
 # ---------------------------------------------------------------- dependencies
-bold "Installing Ansible collections"
+bold "Installing Ansible collections and roles"
 ansible-galaxy collection install -r requirements.yml -p collections >/dev/null
+ansible-galaxy role install -r requirements.yml -p galaxy_roles >/dev/null
 
 # ---------------------------------------------------------------- SSH check
 ssh -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new "root@$VPS_IP" true \

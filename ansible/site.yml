@@ -27,5 +27,5 @@
   roles:
     - { role: base, tags: [base] }
     - { role: security, tags: [security] }
-    - { role: docker, tags: [docker] }
+    - { role: geerlingguy.docker, tags: [docker] }
     - { role: hermes, tags: [hermes] }

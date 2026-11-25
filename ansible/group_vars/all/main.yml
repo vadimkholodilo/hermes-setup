@@ -12,6 +12,15 @@ fail2ban_bantime: 20m
 # Size of /swapfile (0 disables). Added on top of any provider swap. Hermes + browser tools like >= 2 GB RAM; swap is a safety net.
 swap_size_mb: 2048
 
+# ---- Docker (geerlingguy.docker role; see its defaults/main.yml for more) ----
+docker_daemon_options:
+  log-driver: json-file
+  log-opts:
+    max-size: 10m
+    max-file: "5"
+  # Containers keep running while dockerd restarts (e.g. on upgrades).
+  live-restore: true
+
 # ---- Hermes ----
 hermes_dir: /opt/hermes
 hermes_domain: hermes.example.com
