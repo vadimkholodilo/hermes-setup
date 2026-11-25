@@ -1,18 +1,24 @@
 ---
-# We're about to refuse password logins and allow only root, so root must have a key.
-- name: Read root's authorized SSH keys
+# We're about to refuse password logins and allow only ansible_user, so it must have a key.
+- name: Look up the SSH user's home directory
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ ansible_user }}"
+
+- name: Read the SSH user's authorized keys
   ansible.builtin.slurp:
-    src: /root/.ssh/authorized_keys
-  register: root_authorized_keys
+    src: "{{ ansible_facts.getent_passwd[ansible_user][4] }}/.ssh/authorized_keys"
+  register: ssh_user_authorized_keys
 
 - name: Make sure we won't lock ourselves out
   ansible.builtin.assert:
     that:
       - ansible_facts['user_id'] == 'root'
-      - root_authorized_keys.content | b64decode is search('(?m)^(ssh-|ecdsa-|sk-)')
+      - ssh_user_authorized_keys.content | b64decode is search('(?m)^(ssh-|ecdsa-|sk-)')
     fail_msg: >-
-      site.yml must log in as root with an SSH key (root needs a key in /root/.ssh/authorized_keys),
-      because it disables password SSH logins and allows only root.
+      {{ ansible_user }} must log in with an SSH key (in ~/.ssh/authorized_keys) and, if not root,
+      have passwordless sudo, because this role disables password SSH logins and allows only
+      {{ ansible_user }}.
 
 - name: Install security packages
   ansible.builtin.apt:

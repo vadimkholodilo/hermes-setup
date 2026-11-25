@@ -64,7 +64,7 @@ Good to know:
 ### What you need
 
 - **A VPS:** Ubuntu 24.04 or Debian 12/13, x86_64 or arm64, **at least 2 GB RAM** (4 GB if you'll use browser tools).
-- **Your SSH key authorized for `root`.** Most providers let you add it when you create the server. Everything runs as root over SSH keys; there's no separate admin user, because the server only runs Hermes.
+- **SSH access with a key**, as `root` or as a user with passwordless sudo (e.g. `ubuntu` on some clouds). Most providers let you add your key when you create the server. No separate admin user is created, because the server only runs Hermes.
 - **A domain** with a DNS **A record** (and AAAA if you have IPv6) pointing at the VPS. Set it up **before** deploying, so Let's Encrypt can issue the certificate.
 - **On your machine:** `ansible-core` 2.16 or newer (`brew install ansible`).
 
@@ -76,7 +76,9 @@ Good to know:
 
 On the first run it asks for:
 
-- VPS address: an IP, or a `Host` alias from your `~/.ssh/config` (handy if you use a non-default key)
+- VPS address: an IP, or a `Host` alias from your `~/.ssh/config`
+- SSH user: `root` (default), or a user with passwordless sudo
+- SSH private key: leave blank to use your default keys, ssh-agent or `~/.ssh/config`; or give a path such as `~/.ssh/my_vps`
 - domain
 - Let's Encrypt email
 - admin username
@@ -88,7 +90,7 @@ Then the script:
 
 1. Generates a random admin password and a session secret.
 2. Saves all settings to `ansible/inventory/hosts.yml` (gitignored, mode 600).
-3. Checks that it can SSH in as root with your key.
+3. Checks that it can SSH in with your user and key (and, for a non-root user, that `sudo` works without a password).
 4. Runs the full Ansible playbook.
 5. Prints your login and saves it to `credentials.txt` (gitignored, mode 600).
 
@@ -103,7 +105,7 @@ Re-running `./deploy.sh` reuses the saved settings, so your password stays the s
 1. **Sign in.** Open `https://<your-domain>` and use the login from `credentials.txt`.
 2. **Set up your model provider** in the dashboard. Or use the CLI wizard on the server:
    ```bash
-   ssh root@<vps>
+   ssh <user>@<vps>
    cd /opt/hermes && docker compose exec hermes hermes model     # or: hermes setup
    ```
    The repo never manages the provider. Hermes stores it in `/opt/hermes/data/.env`, and the playbook doesn't touch that file.
@@ -132,7 +134,7 @@ If you started with staging certificates:
 ### On the server
 
 ```bash
-ssh root@<vps>
+ssh <user>@<vps>
 cd /opt/hermes
 docker compose ps                               # status
 docker compose logs -f hermes                   # logs
@@ -159,13 +161,13 @@ docker compose pull && docker compose up -d     # upgrade
 | Step | What it does |
 |---|---|
 | `base` role | Full upgrade, base packages, timezone, unattended security upgrades, a 2 GB swap file (added on top of any swap the provider set up). |
-| `security` role | SSH: key-only login (passwords disabled), only root allowed. Firewall (UFW) opens only ports 22, 80 and 443. fail2ban bans an IP for 20 minutes after 10 failed SSH logins. |
+| `security` role | SSH: key-only login (passwords disabled), only your SSH user allowed (root can't log in directly unless it *is* that user). Firewall (UFW) opens only ports 22, 80 and 443. fail2ban bans an IP for 20 minutes after 10 failed SSH logins. |
 | [`geerlingguy.docker`](https://galaxy.ansible.com/ui/standalone/roles/geerlingguy/docker/) | Docker CE and the compose plugin from Docker's own repo. Log rotation and `live-restore` are set via `docker_daemon_options` in `group_vars`. Pinned in `ansible/requirements.yml`. |
 | `hermes` role | Creates `/opt/hermes` with the compose file, `.env` and data directory. Starts the stack, makes Hermes trust Traefik's client IPs, and checks that HTTPS works. |
 
 ### Security notes
 
-- **SSH:** root with keys only. Password logins are disabled for everyone. Before changing SSH, the playbook checks that root has an authorized key, so it can't lock you out.
+- **SSH:** only your SSH user, with keys only. Password logins are disabled for everyone. Before changing SSH, the playbook checks that this user has an authorized key, so it can't lock you out. The exact login is in `credentials.txt`.
 - **fail2ban:** 10 failed SSH logins within 10 minutes bans that IP for 20 minutes. It runs in `aggressive` mode, because with passwords off, bots never produce "Failed password" lines that normal mode would count. Tune `fail2ban_*` in `ansible/group_vars/all/main.yml`.
 - **Firewall:** only ports 22, 80 and 443 are open.
 

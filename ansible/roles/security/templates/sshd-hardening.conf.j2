@@ -1,12 +1,13 @@
 # Managed by Ansible
 Port {{ ssh_port }}
-# Root logs in with SSH keys only; passwords are refused for everyone.
-PermitRootLogin prohibit-password
+# Only the deploy user ({{ ansible_user }}) may log in, with SSH keys only; passwords are refused.
+# Root: key-only if it's the deploy user, otherwise no direct login (use sudo).
+PermitRootLogin {{ 'prohibit-password' if ansible_user == 'root' else 'no' }}
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PubkeyAuthentication yes
 AuthenticationMethods publickey
-AllowUsers root
+AllowUsers {{ ansible_user }}
 MaxAuthTries 3
 LoginGraceTime 30
 X11Forwarding no

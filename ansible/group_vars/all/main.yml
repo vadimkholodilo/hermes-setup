@@ -1,7 +1,8 @@
 ---
 # ---- Machine ----
-# Ansible logs in as root with your existing SSH key (no separate admin user: the box only runs Hermes).
-# Password SSH logins get disabled, so root must already have an authorized key.
+# Ansible logs in as ansible_user (set in hosts.yml; root by default) with your existing SSH key.
+# No separate admin user is created. A non-root ansible_user needs passwordless sudo.
+# Password SSH logins get disabled, so ansible_user must already have an authorized key.
 # Server clock (logs, unattended upgrades).
 timezone: UTC
 ssh_port: 22
@@ -20,6 +21,9 @@ docker_daemon_options:
     max-file: "5"
   # Containers keep running while dockerd restarts (e.g. on upgrades).
   live-restore: true
+
+# A non-root SSH user may run docker without sudo (docker group is root-equivalent anyway).
+docker_users: "{{ [ansible_user] if ansible_user | default('root') != 'root' else [] }}"
 
 # ---- Hermes ----
 hermes_dir: /opt/hermes

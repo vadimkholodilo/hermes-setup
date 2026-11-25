@@ -4,7 +4,10 @@ all:
   hosts:
     hermes:
       ansible_host: '203.0.113.10'      # IP, hostname, or a Host alias from ~/.ssh/config
-      ansible_user: 'root'
+      ansible_user: 'root'              # or a user with passwordless sudo (e.g. 'ubuntu')
+      # Optional: a key other than your defaults / ssh-agent / ~/.ssh/config.
+      # ansible_ssh_private_key_file: '/Users/you/.ssh/my_vps'
+      # ansible_ssh_extra_args: '-o IdentitiesOnly=yes'
       hermes_domain: 'hermes.example.com'
       acme_email: 'you@example.com'
       acme_staging: false
