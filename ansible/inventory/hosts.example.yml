@@ -8,6 +8,7 @@ all:
       hermes_domain: 'hermes.example.com'
       acme_email: 'you@example.com'
       acme_staging: false
+      hermes_timezone: 'Europe/Moscow'     # optional, defaults to timezone (UTC)
       hermes_dashboard_username: 'admin'
       hermes_dashboard_password: ''     # openssl rand -base64 18
       hermes_dashboard_session_secret: ''  # openssl rand -hex 32

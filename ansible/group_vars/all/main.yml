@@ -2,6 +2,7 @@
 # ---- Machine ----
 # Ansible logs in as root with your existing SSH key (no separate admin user: the box only runs Hermes).
 # Password SSH logins get disabled, so root must already have an authorized key.
+# Server clock (logs, unattended upgrades).
 timezone: UTC
 ssh_port: 22
 # fail2ban for sshd: ban an IP for fail2ban_bantime after fail2ban_maxretry failures within fail2ban_findtime.
@@ -18,6 +19,8 @@ acme_email: you@example.com
 # Set true while testing to avoid Let's Encrypt rate limits (cert will be untrusted).
 acme_staging: false
 hermes_version: stable
+# Timezone inside the Hermes container (cron jobs, timestamps). IANA name, e.g. Europe/Moscow.
+hermes_timezone: "{{ timezone }}"
 traefik_version: v3.6
 # UID/GID of the non-root "hermes" user inside the image; the data dir must be owned by it.
 hermes_container_uid: 10000
