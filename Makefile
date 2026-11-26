@@ -7,7 +7,7 @@ DEV := docker compose -f docker/compose.yml -f docker/compose.dev.yml --env-file
 PROD := docker compose -f docker/compose.yml --env-file docker/.env.example
 
 .DEFAULT_GOAL := help
-.PHONY: help deploy hermes check lint deps dev dev-down dev-restart dev-logs dev-ps dev-pull dev-config dev-shell
+.PHONY: help deploy hermes check lint deps dev dev-webapp dev-extras dev-down dev-restart dev-logs dev-ps dev-pull dev-config dev-shell
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -35,6 +35,19 @@ dev: ## Start the local dev stack → http://hermes.localhost:8080 (dev / dev-pa
 	$(DEV) up -d
 	@echo "Hermes:  http://hermes.localhost:8080  (login dev / dev-password)"
 	@echo "Traefik: http://localhost:8081"
+
+dev-webapp: ## Turn on the Webapp (chat UI) in the dev stack → http://hermes.localhost:8080/webapp/
+	$(DEV) exec -T hermes hermes config set webapp.enabled true
+	$(DEV) exec -T hermes hermes config set webapp.host 0.0.0.0
+	$(DEV) exec -T hermes hermes config set webapp.port 9120
+	$(DEV) exec -T hermes hermes config set webapp.public_url http://hermes.localhost:8080/webapp
+	$(DEV) restart hermes
+	@echo "Webapp: http://hermes.localhost:8080/webapp/ in about a minute (login dev / dev-password)"
+
+dev-extras: ## Install the TTS/STT extras (edge-tts, stt-whisper) in the dev stack
+	$(DEV) exec -T hermes hermes pm install pnpm
+	$(DEV) exec -T hermes hermes pm install --extra edge-tts --extra stt-whisper
+	$(DEV) restart hermes
 
 dev-down: ## Stop the dev stack (state in docker/.dev-data is kept)
 	$(DEV) down

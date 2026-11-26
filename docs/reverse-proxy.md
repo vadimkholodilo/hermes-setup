@@ -17,7 +17,8 @@ The one trade-off: Traefik mounts `/var/run/docker.sock` (read-only), which give
 ## How it's wired here
 
 - Traefik is the only container with published ports (80 → redirect, 443).
-- Hermes has **no published ports**. Traefik reaches it on the internal `hermes_proxy` network at port 9119 (dashboard).
+- Hermes has **no published ports**. Traefik reaches it on the internal `hermes_proxy` network at port 9119 (dashboard) and 9120 (Webapp).
+- The Webapp (browser version of Hermes Desktop) is at `/webapp/`. Its router strips the prefix, and Traefik then sends `X-Forwarded-Prefix: /webapp`, which Hermes uses to rewrite its redirects, cookie paths and asset URLs. Requests to a bare `/webapp` are redirected to `/webapp/`, because the page loads its assets from relative `./assets/` paths. It's served by the gateway's own listener, which the playbook turns on with `webapp.enabled/host/port/public_url` in `config.yaml`. `public_url` must match the browser URL, or Hermes rejects the page's writes. Same login and the same per-IP rate limit (`trusted_proxies` covers both listeners, verified locally).
 - Traefik only terminates TLS and forwards traffic. There is **no login at the proxy**, so browsers and the Hermes Desktop app talk to Hermes' own login directly.
 - **Hermes' dashboard login** (`HERMES_DASHBOARD_BASIC_AUTH_*`) is the gate. Hermes refuses to start the dashboard on `0.0.0.0` without an auth provider. It rate-limits logins to 10 failures per minute per client IP.
 - Traefik has a fixed IP (`172.30.0.254`), and the playbook sets `dashboard.trusted_proxies` to it. Hermes then uses the real client IP from `X-Forwarded-For` for that rate limit. Without it, all visitors share Traefik's IP, and one bot could lock everyone out (verified locally).

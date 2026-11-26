@@ -46,3 +46,8 @@ if [ -z "$ok" ]; then
   exit 1
 fi
 echo "Dashboard answers (HTTP $code)."
+{% if hermes_extras | length > 0 %}
+
+# A new image re-resolves the extras at boot; make sure they're still there (TTS/STT etc.).
+/usr/local/sbin/hermes-extras
+{% endif %}

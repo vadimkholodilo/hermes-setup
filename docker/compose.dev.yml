@@ -49,7 +49,17 @@ services:
       - traefik.http.routers.hermes.rule=Host(`${HERMES_DOMAIN}`)
       - traefik.http.routers.hermes.entrypoints=web
       - traefik.http.routers.hermes.middlewares=hermes-headers
+      - traefik.http.routers.hermes.service=hermes
       - traefik.http.services.hermes.loadbalancer.server.port=9119
+      - traefik.http.routers.hermes-webapp.rule=Host(`${HERMES_DOMAIN}`) && (Path(`/webapp`) || PathPrefix(`/webapp/`))
+      - traefik.http.routers.hermes-webapp.entrypoints=web
+      - traefik.http.routers.hermes-webapp.middlewares=hermes-webapp-slash,hermes-webapp-strip,hermes-headers
+      - traefik.http.routers.hermes-webapp.service=hermes-webapp
+      - traefik.http.middlewares.hermes-webapp-slash.redirectregex.regex=^(https?://[^/]+/webapp)$$
+      - traefik.http.middlewares.hermes-webapp-slash.redirectregex.replacement=$${1}/
+      - traefik.http.middlewares.hermes-webapp-slash.redirectregex.permanent=true
+      - traefik.http.middlewares.hermes-webapp-strip.stripprefix.prefixes=/webapp
+      - traefik.http.services.hermes-webapp.loadbalancer.server.port=9120
       - traefik.http.middlewares.hermes-headers.headers.contentTypeNosniff=true
       - traefik.http.middlewares.hermes-headers.headers.referrerPolicy=same-origin
 

@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Managed by Ansible (roles/hermes). Run by the playbook and by hermes-update after an image update.
+#
+# Makes sure Hermes' optional Python extras ({{ hermes_extras | join(', ') }}) are installed.
+# The stock image ships without them (e.g. edge-tts for text-to-speech, stt-whisper =
+# faster-whisper for local speech-to-text). `hermes pm install` puts them in a dependency
+# generation on the data volume, which Hermes re-resolves at every boot, so they normally
+# survive image updates; this script catches the case where that re-resolution fell back
+# to the bare image.
+#
+# Prints CHANGED (and restarts Hermes) only when it installed something.
+set -euo pipefail
+
+cd {{ hermes_dir }}
+dc() { docker compose -f compose.yml "$@"; }
+hx() { dc exec -T hermes hermes "$@"; }
+
+extras=({{ hermes_extras | map('quote') | join(' ') }})
+
+# Which extras the gateway would NOT get at boot. It imports each extra's anchor module (Hermes'
+# own pm.extras.ANCHORS) in the dependency generation the gateway selects. If this probe itself
+# breaks (Hermes internals changed), every extra counts as missing and gets (re)installed, which
+# is safe because `hermes pm install` is idempotent.
+probe() {
+  dc exec -T -u hermes -w /tmp hermes /opt/hermes/.venv/bin/python -P - "${extras[@]}" <<'EOF'
+import importlib, site, sys
+from pathlib import Path
+site.addsitedir("/opt/hermes/.venv/lib/python3.14/site-packages")
+sys.path.insert(0, "/opt/hermes")
+from pm.environments import activate_dependencies
+activate_dependencies(Path("/opt/hermes"))
+from pm.extras import ANCHORS
+missing = []
+for extra in sys.argv[1:]:
+    anchors = ANCHORS[extra]
+    for module in anchors if isinstance(anchors, tuple) else (anchors,):
+        try:
+            importlib.import_module(module)
+        except ImportError:
+            missing.append(extra)
+            break
+print(" ".join(missing))
+EOF
+}
+
+if ! missing="$(probe 2>/dev/null)"; then
+  echo "Could not probe installed extras; reinstalling all of them."
+  missing="${extras[*]}"
+fi
+[ -n "$missing" ] || { echo "Extras present: ${extras[*]}"; exit 0; }
+
+echo "Installing Hermes extras: $missing"
+# `pm install --extra` refuses to run while pnpm is missing (the image's
+# "install out of sync (pnpm...)" warning). pnpm lands in the data volume too.
+if ! hx pm doctor 2>/dev/null | grep -q '✓ pnpm'; then
+  hx pm install pnpm
+fi
+args=()
+for extra in $missing; do args+=(--extra "$extra"); done
+hx pm install "${args[@]}"
+
+# Running processes never switch dependency generations; the restart picks up the new one.
+dc restart hermes
+echo CHANGED

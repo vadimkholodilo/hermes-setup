@@ -75,11 +75,27 @@ services:
     # No ports published: only reachable through Traefik.
     labels:
       - traefik.enable=true
+      # Dashboard (port 9119) at the domain root.
       - traefik.http.routers.hermes.rule=Host(`${HERMES_DOMAIN}`)
       - traefik.http.routers.hermes.entrypoints=websecure
       - traefik.http.routers.hermes.tls.certresolver=letsencrypt
       - traefik.http.routers.hermes.middlewares=hermes-headers
+      - traefik.http.routers.hermes.service=hermes
       - traefik.http.services.hermes.loadbalancer.server.port=9119
+      # Webapp (browser version of Hermes Desktop, port 9120) at /webapp. It's served by the
+      # gateway's own listener once config.yaml has webapp.enabled/host/public_url (set by the
+      # hermes role). stripprefix sends X-Forwarded-Prefix, which Hermes uses to rewrite its URLs.
+      # The longer rule wins over the dashboard router.
+      - traefik.http.routers.hermes-webapp.rule=Host(`${HERMES_DOMAIN}`) && (Path(`/webapp`) || PathPrefix(`/webapp/`))
+      - traefik.http.routers.hermes-webapp.entrypoints=websecure
+      - traefik.http.routers.hermes-webapp.tls.certresolver=letsencrypt
+      - traefik.http.routers.hermes-webapp.middlewares=hermes-webapp-slash,hermes-webapp-strip,hermes-headers
+      - traefik.http.routers.hermes-webapp.service=hermes-webapp
+      - traefik.http.middlewares.hermes-webapp-slash.redirectregex.regex=^(https?://[^/]+/webapp)$$
+      - traefik.http.middlewares.hermes-webapp-slash.redirectregex.replacement=$${1}/
+      - traefik.http.middlewares.hermes-webapp-slash.redirectregex.permanent=true
+      - traefik.http.middlewares.hermes-webapp-strip.stripprefix.prefixes=/webapp
+      - traefik.http.services.hermes-webapp.loadbalancer.server.port=9120
       - traefik.http.middlewares.hermes-headers.headers.stsSeconds=31536000
       - traefik.http.middlewares.hermes-headers.headers.stsIncludeSubdomains=true
       - traefik.http.middlewares.hermes-headers.headers.contentTypeNosniff=true

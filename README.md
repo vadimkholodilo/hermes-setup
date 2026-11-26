@@ -7,6 +7,7 @@ Run [Hermes Agent](https://hermes-agent.nousresearch.com/) on your own VPS with 
 
 ```
 Internet ─▶ :443 Traefik ──(HTTPS)──▶ Hermes dashboard :9119  (Hermes login)
+                       └── /webapp/ ──▶ Hermes Webapp :9120     (same login; chat UI)
                                       Hermes gateway ─▶ model provider / Telegram / ...
                                       /opt/hermes/data  (all state)
 ```
@@ -35,6 +36,7 @@ make dev
 | Open | What | Login |
 |---|---|---|
 | http://hermes.localhost:8080 | Hermes dashboard | `dev` / `dev-password` |
+| http://hermes.localhost:8080/webapp/ | Hermes Webapp (chat UI). Run `make dev-webapp` once to turn it on. | `dev` / `dev-password` |
 | http://localhost:8081 | Traefik UI (dev only) | none |
 
 The Hermes URL also works as a Remote gateway in the Hermes Desktop app.
@@ -109,7 +111,9 @@ Re-running `./deploy.sh` reuses the saved settings, so your password stays the s
    cd /opt/hermes && docker compose exec hermes hermes model     # or: hermes setup
    ```
    The repo never manages the provider. Hermes stores it in `/opt/hermes/data/.env`, and the playbook doesn't touch that file.
-3. **Connect Hermes Desktop (optional).** In the app, go to Settings → Gateways → Remote gateway. Enter `https://<your-domain>` and sign in with the same login.
+3. **Chat in the browser (optional).** `https://<your-domain>/webapp/` is the Webapp: the Hermes Desktop interface served from the gateway, with the same login. It's friendlier than the dashboard's terminal-style chat, and it works on networks that block Telegram. Set `hermes_webapp_enabled: false` to turn it off.
+4. **Voice works out of the box.** The stock image has no text-to-speech or speech-to-text modules, so the playbook installs two Hermes extras: `edge-tts` (TTS; the default provider, free Microsoft voices, needs internet) and `stt-whisper` (local speech-to-text with faster-whisper; nothing leaves the server). The first transcription downloads the Whisper `base` model (about 150 MB) into the data volume. While loaded, Whisper uses a few hundred MB of RAM. Change the list with `hermes_extras` in `ansible/group_vars/all/main.yml`.
+5. **Connect Hermes Desktop (optional).** In the app, go to Settings → Gateways → Remote gateway. Enter `https://<your-domain>` and sign in with the same login.
 
 ### Switch to real certificates
 
@@ -138,7 +142,8 @@ A systemd timer updates the stack every day at **04:00** in Hermes' timezone (pl
 1. pulls newer images for the services in `/opt/hermes/compose.yml`;
 2. recreates only the containers whose image changed;
 3. checks that the dashboard answers;
-4. removes the images it just replaced.
+4. removes the images it just replaced;
+5. makes sure the voice extras (see below) are still installed.
 
 It only acts on this compose project, so other containers on the same server are never touched. This replaces Watchtower, which is archived.
 
@@ -184,7 +189,7 @@ docker compose pull && docker compose up -d     # upgrade by hand (the timer doe
 | `base` role | Full upgrade, base packages, timezone, unattended security upgrades, a 2 GB swap file (added on top of any swap the provider set up). |
 | `security` role | SSH: key-only login (passwords disabled), only your SSH user allowed (root can't log in directly unless it *is* that user). Firewall (UFW) opens only ports 22, 80 and 443. fail2ban bans an IP for 20 minutes after 10 failed SSH logins. |
 | [`geerlingguy.docker`](https://galaxy.ansible.com/ui/standalone/roles/geerlingguy/docker/) | Docker CE and the compose plugin from Docker's own repo. Log rotation and `live-restore` are set via `docker_daemon_options` in `group_vars`. Pinned in `ansible/requirements.yml`. |
-| `hermes` role | Creates `/opt/hermes` with the compose file, `.env` and data directory. Starts the stack, makes Hermes trust Traefik's client IPs, installs the daily auto-update timer, and checks that HTTPS works. |
+| `hermes` role | Creates `/opt/hermes` with the compose file, `.env` and data directory. Starts the stack, makes Hermes trust Traefik's client IPs, turns on the Webapp, installs the `hermes_extras` (TTS/STT) via `/usr/local/sbin/hermes-extras`, installs the daily auto-update timer, and checks that HTTPS works. |
 
 ### Security notes
 

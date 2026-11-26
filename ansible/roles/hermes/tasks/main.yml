@@ -96,13 +96,62 @@
   when: ("- " ~ hermes_traefik_ip) not in hermes_trusted_proxies.stdout
   register: hermes_trusted_proxies_set
 
-- name: Restart Hermes to apply trusted_proxies
+# The Webapp (browser version of Hermes Desktop) is served by the gateway's own listener on
+# port 9120, which Traefik routes to at https://<domain>/webapp/ (labels in docker/compose.yml).
+# public_url must be the URL the browser uses, or Hermes rejects its cookie-authenticated writes.
+- name: Read webapp settings
+  community.docker.docker_compose_v2_exec:
+    project_src: "{{ hermes_dir }}"
+    files: [compose.yml]
+    service: hermes
+    argv: [hermes, config, get, webapp]
+    tty: false
+  register: hermes_webapp
+  changed_when: false
+  check_mode: false # read-only
+
+- name: Configure the Webapp
+  community.docker.docker_compose_v2_exec:
+    project_src: "{{ hermes_dir }}"
+    files: [compose.yml]
+    service: hermes
+    argv: [hermes, config, set, "webapp.{{ item.key }}", "{{ item.value }}"]
+    tty: false
+  loop: "{{ hermes_webapp_settings | dict2items }}"
+  loop_control:
+    label: "webapp.{{ item.key }} = {{ item.value }}"
+  when: "(item.key ~ ': ' ~ item.value) not in hermes_webapp.stdout_lines"
+  register: hermes_webapp_set
+  vars:
+    hermes_webapp_settings:
+      enabled: "{{ hermes_webapp_enabled | ternary('true', 'false') }}"
+      host: 0.0.0.0
+      port: 9120 # must match the hermes-webapp service port in docker/compose.yml
+      public_url: "https://{{ hermes_domain }}/webapp"
+
+- name: Restart Hermes to apply trusted_proxies / webapp settings
   community.docker.docker_compose_v2:
     project_src: "{{ hermes_dir }}"
     files: [compose.yml]
     services: [hermes]
     state: restarted
-  when: hermes_trusted_proxies_set is changed
+  when: hermes_trusted_proxies_set is changed or hermes_webapp_set is changed
+
+# Optional Python extras (TTS/STT etc.) that the stock image lacks. The helper is also called by
+# hermes-update after an image update. It installs into the data volume and restarts Hermes if needed.
+- name: Extras helper script
+  ansible.builtin.template:
+    src: hermes-extras.sh.j2
+    dest: /usr/local/sbin/hermes-extras
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Install Hermes extras ({{ hermes_extras | join(', ') }})
+  ansible.builtin.command: /usr/local/sbin/hermes-extras
+  register: hermes_extras_run
+  changed_when: "'CHANGED' in hermes_extras_run.stdout_lines"
+  when: hermes_extras | length > 0
 
 - name: Auto-update timer
   ansible.builtin.include_tasks: autoupdate.yml
@@ -124,4 +173,5 @@
   ansible.builtin.debug:
     msg:
       - "Dashboard: https://{{ hermes_domain }}  (HTTP {{ hermes_https.status | default('no answer') }})"
+      - "{{ 'Webapp (chat UI): https://' ~ hermes_domain ~ '/webapp/' if hermes_webapp_enabled else 'Webapp: disabled' }}"
       - "If it didn't answer: check DNS for {{ hermes_domain }} and `docker compose -f {{ hermes_dir }}/compose.yml logs`."

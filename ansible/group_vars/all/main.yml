@@ -52,6 +52,20 @@ hermes_dashboard_username: admin
 hermes_dashboard_password: ""
 hermes_dashboard_session_secret: ""
 
+# Optional Python extras of Hermes (pyproject extras) installed on top of the stock image, which
+# ships without them. Kept in the data volume across image updates (/usr/local/sbin/hermes-extras).
+#   edge-tts     text-to-speech, the default tts.provider (free, Microsoft Edge voices)
+#   stt-whisper  local speech-to-text (faster-whisper; model downloads on first use, ~150 MB,
+#                and uses a few hundred MB of RAM while loaded)
+# Others: see `hermes_extras` names in /opt/hermes/pm/extras.py (ANCHORS) inside the container.
+hermes_extras:
+  - edge-tts
+  - stt-whisper
+
+# Webapp: the browser version of Hermes Desktop (a chat UI, friendlier than the dashboard's
+# terminal chat) at https://<hermes_domain>/webapp/, same login as the dashboard.
+hermes_webapp_enabled: true
+
 # Traefik's fixed IP on the hermes_proxy network (must match docker/compose.yml).
 # Hermes trusts X-Forwarded-For only from this address.
 hermes_traefik_ip: 172.30.0.254
